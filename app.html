@@ -216,12 +216,15 @@ initFirebase();
 // ==========================================================
 
 // Merkez mahalle evreni (veri setinden çıkarıldı, editörde seçenek listesi olarak kullanılır)
-var MERKEZ_MAHALLE_MASTER = ["Cumhuriyet","Organize Sanayi Bölgesi","Dumlupınar","Erenler","Selçuklu","Burmalı","Güvenevler","Dörtyol","Yenice","Fatih","Marulcu","Mareşal Fevzi Çakmak","Veyselkarani","Akmescit","Kanlıca","Akçin","Ali İhsan Paşa","Aliçetinkaya","Derviş Paşa","Sahipata","Esentepe","Fakıpaşa","İstiklal","Hürriyet","Gazi","Osmangazi","Hoca Ahmet Yesevi","Sakarya","Nazmi Saatçi","Battalgazi","Zafer","Dairecep","Karşıyaka","Kocatepe","Fevzi Çakmak","Eşrefpaşa","Orhangazi","Hasan Karaağaç","Uğur","Atatürk","Örnekevler","Karaman","Yavuz Selim","Yunus Emre","Hamidiye","Mecidiye","Kurtuluş","Ataköy","Kasımpaşa","Hattat Karahisar","Yunuslar","Sümer","Yeşilyurt","Örnek","Hisar","Sadıkbey","Barbaros","Yaka","Umurbey","Şehit Ahmet","Beyazıt","Ulucami","Olucak","Osmanlı","Tacı Ahmet","Çakır","Gökhan","Ertuğrulgazi","Küçükçobanlı","Gültepe","Kayadibi","Altındağ","Yarenler","Demirçevre","Çavuşbaş","Yeni","Camikebir"];
+var MERKEZ_MAHALLE_MASTER = ["Akçın","Akmescit","Ali İhsan Paşa","Aliçetinkaya","Ataköy","Barbaros","Battalgazi","Bedrik","Beyazıt","Burmalı","Camikebir","Cumhuriyet","Çakır","Çavuşbaş","Dairecep","Demirçevre","Derviş Paşa","Dörtyol","Dumlupınar","Erenler","Ertuğrulgazi","Esentepe","Eşrefpaşa","Fakıpaşa","Fatih","Gazi","Güvenevler","Hacıabdurrahman","Hacı Mustafa","Hacı Nuh","Hamidiye","Hasan Karaağaç","Hattat Karahisar","Hoca Ahmet Yesevi","İsmail","İstiklal","Kanlıca","Karaman","Karşıyaka","Kasımpaşa","Kayadibi","Kışlacık","Kocatepe","Küçük Çobanlı","Mareşal Fevzi Çakmak","Marulcu","Mecidiye","Mevlana","Nazmi Saatçi","Olucak","Organize Sanayi Bölgesi","Orhangazi","Osmangazi","Örnekevler","Sadıkbey","Sahipata","Selçuklu","Sinanpaşa","Sümer","Tacı Ahmet","Umurbey","Veyselkarani","Yarenler","Yenice","Yeşilyurt","Yunus Emre","Zafer"];
+
+// Köy/kasaba evreni (editörde seçenek listesi)
+var KOY_MASTER = ["Anıtkaya","Bayatçık","Bayramgazi","Belkaracaören","Beyyazı","Bostanlı","Burhaniye","Çakırköy","Çavdarlı","Çayırbağ","Çıkrık","Değirmenayvalı","Değirmendere","Demirçevre","Erkmen","Fethibey","Gebeceler","Halımoru","Işıklar","Karaaslan","Kışlacık","Kızıldağ","Kocatepe","Kozluca","Köprülü","Küçükkalecik","Nuribey","Olucak","Salar","Saraydüzü","Sarık","Susuz","Sülümenli","Sülün"];
 
 var EKIPLER = [];
 var aktifEkipId = null;
 var EKIP_URETIM_KATEGORILERI = [];  // aktif ekibin sorumlu olduğu üretim kategori id'leri
-var DEV_MODU = false;  // dev sürümünde true yapılır: ekip ayarları _dev'e yazılır, canlı veriye dokunulmaz
+var DEV_MODU = true;  // dev sürümünde true yapılır: ekip ayarları _dev'e yazılır, canlı veriye dokunulmaz
 var AKTIF_EKIP_KEY = DEV_MODU ? 'aktif_ekip_id_dev' : 'aktif_ekip_id';
 var EKIPLER_KEY = DEV_MODU ? 'ekipler_v1_dev' : 'ekipler_v1';
 var EKIPLER_DOC = DEV_MODU ? 'ekipler_dev' : 'ekipler';
@@ -232,6 +235,12 @@ function tumMahalleSecenekleri() {
   (MERKEZ_MAHALLE_MASTER||[]).forEach(function(m){ set[m] = true; });
   (EKIPLER||[]).forEach(function(e){ (e.mahalleler||[]).forEach(function(m){ set[m]=true; }); });
   (typeof TUM_MAHALLELER !== 'undefined' ? TUM_MAHALLELER : []).forEach(function(m){ set[m]=true; });
+  return Object.keys(set).sort(function(a,b){ return a.localeCompare(b,'tr'); });
+}
+function tumKoySecenekleri() {
+  var set = {};
+  (typeof KOY_MASTER !== 'undefined' ? KOY_MASTER : []).forEach(function(k){ set[k]=true; });
+  (EKIPLER||[]).forEach(function(e){ (e.kasabalar||[]).forEach(function(k){ set[k]=true; }); });
   return Object.keys(set).sort(function(a,b){ return a.localeCompare(b,'tr'); });
 }
 
@@ -264,6 +273,7 @@ function ekiplerFirestoreYukle() {
       var uzak = (doc.data()||{}).ekipler;
       if (Array.isArray(uzak) && uzak.length) {
         EKIPLER = uzak;
+        ekipKategoriMigrasyon();
         try { localStorage.setItem(EKIPLER_KEY, JSON.stringify(EKIPLER)); } catch(e){}
         // Aktif ekip kuralını tazele
         var ek = ekipBul(aktifEkipId) || EKIPLER[0];
@@ -340,10 +350,25 @@ function aktifEkibeGec(id, yenidenCiz) {
   }
 }
 
+// Eski kategori id'lerini (gida_temas vb.) yeni taksonomiye taşı: geçersiz id'leri olan ekibi "tüm üretim"e çevir
+function ekipKategoriMigrasyon() {
+  if (typeof TUM_URETIM_KATEGORILER === 'undefined') return;
+  var gecerli = TUM_URETIM_KATEGORILER.map(function(k){ return k.id; });
+  var degisti = false;
+  EKIPLER.forEach(function(e){
+    var orj = (e.uretimKategorileri||[]);
+    var filt = orj.filter(function(id){ return gecerli.indexOf(id) >= 0; });
+    if (orj.length && !filt.length) { e.uretimKategorileri = gecerli.slice(); degisti = true; }
+    else if (filt.length !== orj.length) { e.uretimKategorileri = filt; degisti = true; }
+  });
+  if (degisti && typeof ekiplerKaydet === 'function') ekiplerKaydet();
+}
+
 // Başlatma: yerelden yükle, yoksa Ekip 1'i tohumla, aktif ekibi uygula
 function ekipSistemiBaslat() {
   ekiplerYukle();
   if (!EKIPLER.length) ekip1Tohumla();
+  ekipKategoriMigrasyon();
   var ek = ekipBul(aktifEkipId) || EKIPLER[0];
   if (ek) { aktifEkipId = ek.id; ekipKurallariUygula(ek); }
 }
@@ -367,6 +392,7 @@ window.ekiplerKaydet = ekiplerKaydet;
 // ===== Ekip Yönetimi editörü + ekip geçiş menüsü (admin) =====
 var _duzenlenenEkipId = null;
 function _ekipEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function _ekipSay(n){ n=n||0; return ' <span style="font-size:11px;color:'+(n?'var(--gri)':'#c0392b')+';">('+n+')</span>'; }
 function _ekipYeniId(){ var n=1, ids=EKIPLER.map(function(e){return e.id;}); while(ids.indexOf('ekip'+n)>=0) n++; return 'ekip'+n; }
 
 function ekipDuzenleSec(id){ _duzenlenenEkipId=id; ekipYonetimiGoster(); }
@@ -375,6 +401,7 @@ function ekipMahalleToggle(m,on){ var ek=ekipBul(_duzenlenenEkipId); if(!ek) ret
 function ekipKategoriToggle(id,on){ var ek=ekipBul(_duzenlenenEkipId); if(!ek) return; ek.uretimKategorileri=ek.uretimKategorileri||[]; var i=ek.uretimKategorileri.indexOf(id); if(on&&i<0) ek.uretimKategorileri.push(id); if(!on&&i>=0) ek.uretimKategorileri.splice(i,1); }
 function ekipKoyEkle(){ var inp=document.getElementById('ekip-koy-input'); if(!inp||!inp.value.trim()) return; var ek=ekipBul(_duzenlenenEkipId); if(!ek) return; var v=inp.value.trim(); ek.kasabalar=ek.kasabalar||[]; if(ek.kasabalar.indexOf(v)<0) ek.kasabalar.push(v); inp.value=''; ekipYonetimiGoster(); setTimeout(function(){ var i2=document.getElementById('ekip-koy-input'); if(i2) i2.focus(); },0); }
 function ekipKoySil(v){ var ek=ekipBul(_duzenlenenEkipId); if(!ek||!ek.kasabalar) return; ek.kasabalar=ek.kasabalar.filter(function(k){return k!==v;}); ekipYonetimiGoster(); }
+function ekipKoyToggle(k,on){ var ek=ekipBul(_duzenlenenEkipId); if(!ek) return; ek.kasabalar=ek.kasabalar||[]; var i=ek.kasabalar.indexOf(k); if(on&&i<0)ek.kasabalar.push(k); if(!on&&i>=0)ek.kasabalar.splice(i,1); var b=document.getElementById('ekip-koy-sayac'); if(b) b.textContent=ek.kasabalar.length+' seçili'; }
 
 function ekipYeniEkle(){
   var id=_ekipYeniId();
@@ -410,6 +437,7 @@ function ekipYonetimiGoster(){
   if(!_duzenlenenEkipId || !ekipBul(_duzenlenenEkipId)) _duzenlenenEkipId=((typeof aktifEkip==='function'&&aktifEkip())||EKIPLER[0]||{}).id;
   var ek=ekipBul(_duzenlenenEkipId);
   if(!ek){ root.innerHTML='<p style="color:var(--gri);">Ekip bulunamadı.</p>'; return; }
+  var say=(typeof ekipSecenekSayilari==='function')?ekipSecenekSayilari():{mah:{},koy:{},kat:{}};
   var mahOpts=(typeof tumMahalleSecenekleri==='function')?tumMahalleSecenekleri():(ek.mahalleler||[]);
   var h='';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">';
@@ -423,17 +451,17 @@ function ekipYonetimiGoster(){
   h+='<input type="text" value="'+_ekipEsc(ek.ad||'')+'" oninput="ekipAdGuncelle(this.value)" style="width:100%;margin-bottom:14px;">';
   h+='<div class="bolum">Mahalleler (<span id="ekip-mah-sayac">'+(ek.mahalleler||[]).length+' seçili</span>)</div>';
   h+='<div style="max-height:240px;overflow-y:auto;border:1px solid var(--sinir);border-radius:8px;padding:8px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:2px;">';
-  mahOpts.forEach(function(m){ var on=(ek.mahalleler||[]).indexOf(m)>=0; h+='<label style="display:flex;align-items:center;gap:4px;width:48%;font-size:13px;padding:3px;box-sizing:border-box;"><input type="checkbox" value="'+_ekipEsc(m)+'" '+(on?'checked':'')+' onchange="ekipMahalleToggle(this.value,this.checked)">'+_ekipEsc(m)+'</label>'; });
+  mahOpts.forEach(function(m){ var on=(ek.mahalleler||[]).indexOf(m)>=0; h+='<label style="display:flex;align-items:center;gap:4px;width:48%;font-size:13px;padding:3px;box-sizing:border-box;"><input type="checkbox" value="'+_ekipEsc(m)+'" '+(on?'checked':'')+' onchange="ekipMahalleToggle(this.value,this.checked)">'+_ekipEsc(m)+_ekipSay(say.mah[m])+'</label>'; });
   h+='</div>';
-  h+='<div class="bolum">Köy / Kasaba (yazarak ekleyin)</div>';
-  h+='<div style="display:flex;gap:6px;margin-bottom:8px;"><input type="text" id="ekip-koy-input" placeholder="Köy/kasaba adı" style="flex:1;" onkeydown="if(event.key===\'Enter\'){event.preventDefault();ekipKoyEkle();}"><button class="btn btn-yesil btn-kucuk" onclick="ekipKoyEkle()">Ekle</button></div>';
-  h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">';
-  (ek.kasabalar||[]).forEach(function(k){ h+='<span style="background:var(--gri-acik);border-radius:14px;padding:4px 10px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">'+_ekipEsc(k)+'<span data-koy="'+_ekipEsc(k)+'" onclick="ekipKoySil(this.getAttribute(\'data-koy\'))" style="cursor:pointer;color:var(--kirmizi);font-weight:bold;">×</span></span>'; });
-  if(!(ek.kasabalar||[]).length) h+='<span style="font-size:12px;color:var(--gri);">Henüz köy/kasaba eklenmedi.</span>';
+  h+='<div class="bolum">Köy / Kasaba (<span id="ekip-koy-sayac">'+(ek.kasabalar||[]).length+' seçili</span>)</div>';
+  h+='<div style="max-height:220px;overflow-y:auto;border:1px solid var(--sinir);border-radius:8px;padding:8px;margin-bottom:8px;display:flex;flex-wrap:wrap;gap:2px;">';
+  var koyOpts=(typeof tumKoySecenekleri==='function')?tumKoySecenekleri():(ek.kasabalar||[]);
+  koyOpts.forEach(function(k){ var on=(ek.kasabalar||[]).indexOf(k)>=0; h+='<label style="display:flex;align-items:center;gap:4px;width:48%;font-size:13px;padding:3px;box-sizing:border-box;"><input type="checkbox" value="'+_ekipEsc(k)+'" '+(on?'checked':'')+' onchange="ekipKoyToggle(this.value,this.checked)">'+_ekipEsc(k)+_ekipSay(say.koy[k])+'</label>'; });
   h+='</div>';
-  h+='<div class="bolum">Üretim Kategorileri</div>';
-  h+='<div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:16px;">';
-  (typeof TUM_URETIM_KATEGORILER!=='undefined'?TUM_URETIM_KATEGORILER:[]).forEach(function(k){ var on=(ek.uretimKategorileri||[]).indexOf(k.id)>=0; h+='<label style="display:flex;align-items:center;gap:4px;width:48%;font-size:13px;padding:3px;box-sizing:border-box;"><input type="checkbox" value="'+_ekipEsc(k.id)+'" '+(on?'checked':'')+' onchange="ekipKategoriToggle(this.value,this.checked)">'+_ekipEsc(k.label)+'</label>'; });
+  h+='<div style="display:flex;gap:6px;margin-bottom:14px;"><input type="text" id="ekip-koy-input" placeholder="Listede yoksa yazıp ekleyin" style="flex:1;" onkeydown="if(event.key===\'Enter\'){event.preventDefault();ekipKoyEkle();}"><button class="btn btn-yesil btn-kucuk" onclick="ekipKoyEkle()">+ Ekle</button></div>';
+  h+='<div class="bolum">Üretim Kategorileri ('+ (ek.uretimKategorileri||[]).length +' seçili)</div>';
+  h+='<div style="max-height:240px;overflow-y:auto;border:1px solid var(--sinir);border-radius:8px;padding:8px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:2px;">';
+  (typeof TUM_URETIM_KATEGORILER!=='undefined'?TUM_URETIM_KATEGORILER:[]).forEach(function(k){ var on=(ek.uretimKategorileri||[]).indexOf(k.id)>=0; h+='<label style="display:flex;align-items:center;gap:4px;width:48%;font-size:13px;padding:3px;box-sizing:border-box;"><input type="checkbox" value="'+_ekipEsc(k.id)+'" '+(on?'checked':'')+' onchange="ekipKategoriToggle(this.value,this.checked)">'+_ekipEsc(k.label)+_ekipSay(say.kat[k.id])+'</label>'; });
   h+='</div>';
   h+='<button class="btn btn-yesil" style="width:100%;" onclick="ekipDegisiklikleriKaydet()">💾 Ekibi Kaydet</button>';
   h+='<p style="font-size:12px;color:var(--gri);margin-top:10px;">Not: Satış faaliyet türleri (45 tür) tüm ekiplerde ortaktır, burada seçilmez. Bir ekip aktifken yaptığınız kayıt anında listeye yansır.</p>';
@@ -450,6 +478,94 @@ function ekipSeciciDegisti(id){
   try{ if(typeof sorumluTabDegistir==='function') sorumluTabDegistir(typeof aktifSorumluTab!=='undefined'?aktifSorumluTab:'uretim'); }catch(e){}
   if(typeof ekipSeciciDoldur==='function') ekipSeciciDoldur();
 }
+
+// ----- Seçenek başına işletme sayıları (editör başlıklarında gösterilir) -----
+var _ekipSayiCache=null, _ekipSayiLen=-1;
+function ekipSecenekSayilari(){
+  var kaynak=(typeof ISLETMELER!=='undefined'&&ISLETMELER.length)?ISLETMELER:[];
+  if(_ekipSayiCache && _ekipSayiLen===kaynak.length) return _ekipSayiCache;
+  var mah={}, koy={}, kat={};
+  var mahList=(typeof tumMahalleSecenekleri==='function')?tumMahalleSecenekleri():[];
+  var koyList=(typeof tumKoySecenekleri==='function')?tumKoySecenekleri():[];
+  var kats=(typeof TUM_URETIM_KATEGORILER!=='undefined')?TUM_URETIM_KATEGORILER:[];
+  mahList.forEach(function(m){mah[m]=0;}); koyList.forEach(function(k){koy[k]=0;}); kats.forEach(function(k){kat[k.id]=0;});
+  kaynak.forEach(function(i){
+    if(!i||(typeof kayitHaricMi==='function'&&kayitHaricMi(i))) return;
+    if(i.kayitNo&&/^03-\d/.test(i.kayitNo)) return;
+    var disMerkez=(typeof merkezDisindaMi==='function')&&merkezDisindaMi(i);
+    var satis=(typeof satisFaaliyetiMi==='function')&&satisFaaliyetiMi(i);
+    if(satis&&!disMerkez){ mahList.forEach(function(m){ if(mahalleAdreseUyuyorMu(i.adres,m)) mah[m]++; }); }
+    if(satis){ koyList.forEach(function(k){ if(koyAdreseUyuyorMu(i.adres,k)) koy[k]++; }); }
+    if(!disMerkez){ var ilk=_ilkFaaliyet(i.faaliyetAlani); kats.forEach(function(c){ if(c.anahtar.some(function(a){return ilk.includes(a.toLocaleLowerCase('tr'));})) kat[c.id]++; }); }
+  });
+  _ekipSayiCache={mah:mah,koy:koy,kat:kat}; _ekipSayiLen=kaynak.length;
+  return _ekipSayiCache;
+}
+
+// ----- Bir ekip, bir işletmeden sorumlu mu? (global'leri değiştirmeden) -----
+function ekipSorumluMu(ekip, i){
+  if(!ekip||!i) return false;
+  if(typeof kayitHaricMi==='function'&&kayitHaricMi(i)) return false;
+  if(i.kayitNo&&/^03-\d/.test(i.kayitNo)) return false;
+  var disMerkez=(typeof merkezDisindaMi==='function')&&merkezDisindaMi(i);
+  // Üretim
+  var ilk=_ilkFaaliyet(i.faaliyetAlani);
+  var kats=(typeof TUM_URETIM_KATEGORILER!=='undefined')?TUM_URETIM_KATEGORILER:[];
+  var uretimMatch=(ekip.uretimKategorileri||[]).some(function(id){
+    for(var c=0;c<kats.length;c++){ if(kats[c].id===id) return kats[c].anahtar.some(function(a){return ilk.includes(a.toLocaleLowerCase('tr'));}); }
+    return false;
+  });
+  if(uretimMatch&&!disMerkez) return true;
+  var satis=(typeof satisFaaliyetiMi==='function')&&satisFaaliyetiMi(i);
+  // Satış / mahalle (Merkez)
+  if(satis&&!disMerkez&&(ekip.mahalleler||[]).some(function(m){return mahalleAdreseUyuyorMu(i.adres,m);})) return true;
+  // Köy / kasaba
+  if(satis&&(ekip.kasabalar||[]).some(function(k){return koyAdreseUyuyorMu(i.adres,k);})) return true;
+  return false;
+}
+
+// ----- Dağıtım raporu: çakışan (2+ ekip) ve boşta kalan (0 ekip) işletmeler -----
+function ekipDagitimRaporu(){
+  var el=document.getElementById('ekip-rapor-icerik'); if(!el) return;
+  el.innerHTML='<p style="color:var(--gri);font-size:13px;">Hesaplanıyor…</p>';
+  setTimeout(function(){
+    var kaynak=(typeof ISLETMELER!=='undefined'&&ISLETMELER.length)?ISLETMELER:[];
+    var allIds=(typeof TUM_URETIM_KATEGORILER!=='undefined'?TUM_URETIM_KATEGORILER:[]).map(function(k){return k.id;});
+    var superEkip={mahalleler:(typeof MERKEZ_MAHALLE_MASTER!=='undefined'?MERKEZ_MAHALLE_MASTER:[]),kasabalar:(typeof KOY_MASTER!=='undefined'?KOY_MASTER:[]),uretimKategorileri:allIds};
+    var conflicts=[],orphans=[];
+    kaynak.forEach(function(i){
+      if(!ekipSorumluMu(superEkip,i)) return;
+      var claim=EKIPLER.filter(function(e){return ekipSorumluMu(e,i);});
+      if(claim.length===0) orphans.push(i);
+      else if(claim.length>=2) conflicts.push({i:i,ekipler:claim.map(function(e){return e.ad||e.id;})});
+    });
+    var h='';
+    h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">';
+    h+='<span style="background:#fdecea;color:#c0392b;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;">⚠️ Çakışan: '+conflicts.length+'</span>';
+    h+='<span style="background:#fff7e6;color:#b45309;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;">🕳️ Boşta kalan: '+orphans.length+'</span>';
+    h+='</div>';
+    function liste(arr,baslik,tip){
+      var s='<div class="bolum">'+baslik+' ('+arr.length+')</div>';
+      if(!arr.length) return s+'<p style="font-size:13px;color:var(--yesil);margin-bottom:6px;">Yok 👍</p>';
+      s+='<div style="max-height:260px;overflow-y:auto;border:1px solid var(--sinir);border-radius:8px;margin-bottom:6px;">';
+      arr.slice(0,100).forEach(function(o){
+        var i=(tip==='c')?o.i:o;
+        var ekstra=(tip==='c')?(' — <b style="color:#c0392b;">'+_ekipEsc(o.ekipler.join(', '))+'</b>'):'';
+        s+='<div style="padding:7px 10px;border-bottom:1px solid var(--gri-acik);font-size:13px;">'+_ekipEsc(i.isletmeAdi||'(ad yok)')+' <span style="color:var(--gri);font-size:11px;">['+_ekipEsc(i.kayitNo||'')+']</span>'+ekstra+'</div>';
+      });
+      if(arr.length>100) s+='<div style="padding:7px 10px;font-size:12px;color:var(--gri);">…ve '+(arr.length-100)+' tane daha</div>';
+      s+='</div>';
+      return s;
+    }
+    h+=liste(conflicts,'⚠️ Birden fazla ekibe düşenler','c');
+    h+=liste(orphans,'🕳️ Hiçbir ekibe düşmeyenler','o');
+    el.innerHTML=h;
+  },30);
+}
+window.ekipDagitimRaporu=ekipDagitimRaporu;
+window.ekipSorumluMu=ekipSorumluMu;
+window.ekipKoyToggle=ekipKoyToggle;
+
 window.ekipYonetimiGoster=ekipYonetimiGoster;
 window.ekipSeciciDoldur=ekipSeciciDoldur;
 window.ekipSeciciDegisti=ekipSeciciDegisti;
@@ -907,14 +1023,58 @@ var URETIM_YERLERI = [];
 // Veri Firestore isletmeler_master ve cihaz önbelleğinden yüklenir.
 var ISLETMELER = [];
 var TUM_URETIM_KATEGORILER = [
-  {id:'gida_temas', label:'Gıda Temas Madde/Malzeme', anahtar:['gıda ile temas','madde ve malzeme üretimi','metal esaslı','plastik esaslı','kağıt esaslı','baskı mürekkep']},
-  {id:'meyve_isleme', label:'Meyve/Sebze İşleme', anahtar:['meyve ve/veya sebze işleme']},
-  {id:'meyve_paket', label:'Meyve/Sebze Paketleme', anahtar:['meyve sebze paketleme']},
-  {id:'yeniden_ambalaj', label:'Yeniden Ambalajlama', anahtar:['yeniden ambalajlama','gıda ambalajlama']},
-  {id:'alkol', label:'Alkollü İçecek', anahtar:['alkollü içki üretimi']},
-  {id:'alkolsuz', label:'Alkolsüz İçecek', anahtar:['alkolsüz içecek üretimi']},
-  {id:'dondurulmus', label:'Dondurulmuş Gıda', anahtar:['dondurulmuş gıda']},
-  {id:'katki', label:'Gıda Katkı/Aroma', anahtar:['gıda katkı','aroma maddesi','aromatik']}
+  {id:'u1', label:'Alkollü içki üretimi', anahtar:['alkollü içki üretimi']},
+  {id:'u2', label:'Alkolsüz içecek üretimi', anahtar:['alkolsüz içecek üretimi']},
+  {id:'u3', label:'Aromatik sular ve aromatik yağ üretimi', anahtar:['aromatik sular ve aromatik yağ üretimi']},
+  {id:'u4', label:'Baharat işleme', anahtar:['baharat işleme']},
+  {id:'u5', label:'Bal, polen, arı sütü ve temel petek üretimi ve ambalajlama', anahtar:['bal, polen, arı sütü ve temel petek üretimi ve ambalajlama']},
+  {id:'u6', label:'Bisküvi, çikolata, kakaolu ve benzeri ürünler üretimi', anahtar:['bisküvi, çikolata, kakaolu ve benzeri ürünler üretimi']},
+  {id:'u7', label:'Bitkisel ve siyah çay işleme', anahtar:['bitkisel ve siyah çay işleme']},
+  {id:'u8', label:'Bulgur üretimi', anahtar:['bulgur üretimi']},
+  {id:'u9', label:'Buz üretimi', anahtar:['buz üretimi']},
+  {id:'u10', label:'Çerez, cips ve benzeri ürünler üretimi', anahtar:['çerez, cips ve benzeri ürünler üretimi']},
+  {id:'u11', label:'Diğer gıda üreten iş yerleri', anahtar:['diğer gıda üreten iş yerleri']},
+  {id:'u12', label:'Doğal veya fabrikasyon olarak kurutulmuş gıda, kuruyemiş işleme', anahtar:['doğal veya fabrikasyon olarak kurutulmuş gıda, kuruyemiş işleme']},
+  {id:'u13', label:'Dondurma ve yenilebilir buz ürünleri üretimi', anahtar:['dondurma ve yenilebilir buz ürünleri üretimi']},
+  {id:'u14', label:'Dondurulmuş gıda maddesi üretimi', anahtar:['dondurulmuş gıda maddesi üretimi']},
+  {id:'u15', label:'Ekmek ve ekmek çeşitleri üretimi', anahtar:['ekmek ve ekmek çeşitleri üretimi']},
+  {id:'u16', label:'Entegre fındık, fıstık ve benzeri ürünleri işleme', anahtar:['entegre fındık, fıstık ve benzeri ürünleri işleme']},
+  {id:'u17', label:'Et ve et ürünleri üretim tesisleri (sakatat temizleme ve işleme yerleri dâhil)', anahtar:['et ve et ürünleri üretim tesisleri (sakatat temizleme ve işleme yerleri dâhil)']},
+  {id:'u18', label:'Fermente ve salamura ürün üretimi', anahtar:['fermente ve salamura ürün üretimi']},
+  {id:'u19', label:'Gıda ışınlaması yapan iş yerleri', anahtar:['gıda ışınlaması yapan iş yerleri']},
+  {id:'u20', label:'GIDA İLE TEMAS EDEN MADDE VE MALZEME ÜRETİMİ', anahtar:['gıda ile temas eden madde ve malzeme üretimi']},
+  {id:'u21', label:'Hazır çorba ve bulyon, puding, toz karışımlar, mayonez, sos ve benzeri üretimi', anahtar:['hazır çorba ve bulyon, puding, toz karışımlar, mayonez, sos ve benzeri üretimi']},
+  {id:'u22', label:'Hazır yemek, tabldot yemek üretimi', anahtar:['hazır yemek, tabldot yemek üretimi']},
+  {id:'u23', label:'Her türlü gıda katkı maddesi ve aroma maddesi üretimi', anahtar:['her türlü gıda katkı maddesi ve aroma maddesi üretimi']},
+  {id:'u24', label:'Hububat ve bakliyat üretimi', anahtar:['hububat ve bakliyat üretimi']},
+  {id:'u25', label:'İçecek tozu üretimi', anahtar:['içecek tozu üretimi']},
+  {id:'u26', label:'Kahve ve kahve ürünleri üretimi', anahtar:['kahve ve kahve ürünleri üretimi']},
+  {id:'u27', label:'Makarna ve irmik üretimi', anahtar:['makarna ve irmik üretimi']},
+  {id:'u28', label:'Maya üretimi (ekmek, peynir ve her türlü maya)', anahtar:['maya üretimi (ekmek, peynir ve her türlü maya)']},
+  {id:'u29', label:'Meyve sebze paketleme, boylama, sarartma ve mumlama', anahtar:['meyve sebze paketleme, boylama, sarartma ve mumlama']},
+  {id:'u30', label:'Meyve ve/veya sebze işleme', anahtar:['meyve ve/veya sebze işleme']},
+  {id:'u31', label:'Nişasta üretimi', anahtar:['nişasta üretimi']},
+  {id:'u32', label:'Özel beslenme amaçlı gıda maddesi üretimi', anahtar:['özel beslenme amaçlı gıda maddesi üretimi']},
+  {id:'u33', label:'Pasta, börek, hamur ve sütlü tatlılar gibi her türlü pastacılık ürünleri üretimi', anahtar:['pasta, börek, hamur ve sütlü tatlılar gibi her türlü pastacılık ürünleri üretimi']},
+  {id:'u34', label:'Sade pide üretimi', anahtar:['sade pide üretimi']},
+  {id:'u35', label:'Sakız üretimi', anahtar:['sakız üretimi']},
+  {id:'u36', label:'Sıvı ve katı bitkisel yağ üretimi', anahtar:['sıvı ve katı bitkisel yağ üretimi']},
+  {id:'u37', label:'Su ürünleri işleyen iş yerleri', anahtar:['su ürünleri işleyen iş yerleri']},
+  {id:'u38', label:'Süt ve süt ürünleri üreten iş yerleri', anahtar:['süt ve süt ürünleri üreten iş yerleri']},
+  {id:'u39', label:'Şeker paketleme', anahtar:['şeker paketleme']},
+  {id:'u40', label:'Şeker üretimi (paketleme hariç)', anahtar:['şeker üretimi (paketleme hariç)']},
+  {id:'u41', label:'Şekerleme üretimi', anahtar:['şekerleme üretimi']},
+  {id:'u42', label:'Şuruplu Tatlılar', anahtar:['şuruplu tatlılar']},
+  {id:'u43', label:'Tahin, helva ve pekmez üretimi', anahtar:['tahin, helva ve pekmez üretimi']},
+  {id:'u44', label:'Takviye edici gıdaların üretimi', anahtar:['takviye edici gıdaların üretimi']},
+  {id:'u45', label:'Tuz işleme', anahtar:['tuz işleme']},
+  {id:'u46', label:'Un üretimi', anahtar:['un üretimi']},
+  {id:'u47', label:'Unlu mamuller üretimi', anahtar:['unlu mamuller üretimi']},
+  {id:'u48', label:'Vaks ve/veya sakız bazı (sakız mayası, gumbase) üretimi', anahtar:['vaks ve/veya sakız bazı (sakız mayası, gumbase) üretimi']},
+  {id:'u49', label:'Yağhaneler ve yağ dolumu', anahtar:['yağhaneler ve yağ dolumu']},
+  {id:'u50', label:'Yeniden ambalajlama/Gıda ambalajlama', anahtar:['yeniden ambalajlama/gıda ambalajlama']},
+  {id:'u51', label:'Yumurta paketleyen iş yerleri', anahtar:['yumurta paketleyen iş yerleri']},
+  {id:'u52', label:'Zeytinyağı üretimi (yağhaneler hariç)', anahtar:['zeytinyağı üretimi (yağhaneler hariç)']},
 ];
 var TUM_MAHALLELER = ['Mecidiye','Yenice','Hattat Karahisar','Sahipata','Aliçetinkaya','Organize Sanayi Bölgesi','Derviş Paşa','Beyazıt','Dairecep','Camikebir','Çavuşbaş','Akçin','Nazmi Saatçi'];
 var MAHALLE_KALIPLARI = {
@@ -952,6 +1112,13 @@ var MAHALLE_EK_KALIP = {
 };
 
 // Adres satırında mahalle geçiyor mu? Ana kalıp + takma adlar, boşluk/noktalama farkına dayanıklı.
+// Köy/kasaba eşleştirme: ad doğrudan "Merkez"den önce veya "Köyü/Kasaba" ekiyle geçer
+// (sokak adlarını ve "X Mah." mahalle kayıtlarını yanlış yakalamamak için)
+function koyAdreseUyuyorMu(adres, koyAdi) {
+  var a = _normTR(adres), k = _normTR(koyAdi);
+  if (!k) return false;
+  return a.indexOf(k+'merkez') >= 0 || a.indexOf(k+'koyu') >= 0 || a.indexOf(k+'koy') >= 0 || a.indexOf(k+'kasabasi') >= 0 || a.indexOf(k+'kasaba') >= 0;
+}
 function mahalleAdreseUyuyorMu(adres, mahalleAdi) {
   var a = _normTR(adres);
   if (!a) return false;
@@ -1946,6 +2113,10 @@ window.addEventListener('fb-hazir', function() {
     <div class="kart">
       <div class="kart-baslik">🧩 Ekip Yönetimi</div>
       <div id="ekip-yonetim-root"></div>
+      <div style="margin-top:16px;border-top:1px solid var(--sinir);padding-top:14px;">
+        <button class="btn btn-gri" style="width:100%;" onclick="ekipDagitimRaporu()">📊 Dağıtım Raporu (çakışma / boşta kalan)</button>
+        <div id="ekip-rapor-icerik" style="margin-top:12px;"></div>
+      </div>
     </div>
   </div>
 
@@ -2351,7 +2522,7 @@ function koyIsletmeleriDoldur() {
       if (kayitHaricMi(i)) return false;
       if (i.kayitNo && /^03-\d/.test(i.kayitNo)) return false; // onaylı işletmeler hariç
       if (!satisFaaliyetiMi(i)) return false; // yalnızca satış/depo/toplu tüketim faaliyetleri
-      return _normTR(i.ilce).indexOf(hedef) >= 0 || _normTR(i.adres).indexOf(hedef) >= 0;
+      return koyAdreseUyuyorMu(i.adres, kasaba);
     });
     if (bulunan.length) KOY_ISLETMELERI[kasaba] = bulunan;
   });
@@ -3033,7 +3204,7 @@ function sorumlulukKategorisiBelirle(i){
   try {
     if (typeof _uretimTumKategoriEslesiyor === 'function' && _uretimTumKategoriEslesiyor(i) && !merkezDisindaMi(i)) return 'uretim';
     var ks = (typeof SORUMLU_KASABALAR !== 'undefined') ? SORUMLU_KASABALAR : [];
-    for (var k=0;k<ks.length;k++){ var h=_normTR(ks[k]); if(h && (_normTR(i.ilce).indexOf(h)>=0 || _normTR(i.adres).indexOf(h)>=0)) return 'koy'; }
+    for (var k=0;k<ks.length;k++){ if(koyAdreseUyuyorMu(i.adres, ks[k])) return 'koy'; }
   } catch(e){}
   return 'satis';
 }
@@ -4901,7 +5072,7 @@ function isletmeHerhangiSorumlulukta(isletme) {
   try {
     var ks = (typeof SORUMLU_KASABALAR !== 'undefined') ? SORUMLU_KASABALAR : [];
     if (typeof satisFaaliyetiMi === 'function' && satisFaaliyetiMi(isletme)) {
-      for (var k=0;k<ks.length;k++){ var h=_normTR(ks[k]); if(h && (_normTR(isletme.ilce).indexOf(h)>=0 || _normTR(isletme.adres).indexOf(h)>=0)) return true; }
+      for (var k=0;k<ks.length;k++){ if(koyAdreseUyuyorMu(isletme.adres, ks[k])) return true; }
     }
   } catch(e){}
   return false;
@@ -5905,7 +6076,7 @@ function sorumluTohumHesapla(kaynak){
       if(!i||kayitHaricMi(i))return;
       if(i.kayitNo&&/^03-\d/.test(i.kayitNo))return;
       if(!satisFaaliyetiMi(i))return;
-      if(_normTR(i.ilce).indexOf(hedef)>=0||_normTR(i.adres).indexOf(hedef)>=0) ekle(i,'koy');
+      if(koyAdreseUyuyorMu(i.adres, kasaba)) ekle(i,'koy');
     });
   });
   // Manuel sorumluluğa alınanları (kural dışı) kategorisine göre ekle
